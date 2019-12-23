@@ -1,0 +1,5 @@
+cistern (0.2.1~rc0-1) unstable; urgency=medium
+
+  * Initial release (Closes: #947187)
+
+ -- Sebastien Delafond <seb@debian.org>  Fri, 06 Mar 2020 09:26:56 +0100

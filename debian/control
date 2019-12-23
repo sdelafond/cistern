@@ -1,0 +1,42 @@
+Source: cistern
+Section: utils
+Priority: optional
+Maintainer: Sebastien Delafond <seb@debian.org>
+Build-Depends: debhelper-compat (= 12),
+               dh-golang,
+	       git,
+               golang-any,
+               golang-github-gdamore-tcell-dev,
+               golang-github-google-go-cmp-dev,
+               golang-github-google-go-github-dev (>= 29),
+               golang-github-mattn-go-runewidth-dev,
+               golang-github-pelletier-go-toml-dev,
+               golang-golang-x-oauth2-dev,
+	       golang-github-xanzy-go-gitlab-dev,
+               golang-gopkg-src-d-go-git.v4-dev
+Standards-Version: 4.4.1
+Homepage: https://github.com/nbedos/cistern
+Vcs-Git: https://salsa.debian.org/debian/cistern.git
+Vcs-Browser: https://salsa.debian.org/debian/cistern
+XS-Go-Import-Path: github.com/nbedos/cistern
+
+Package: cistern
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, less
+Built-Using: ${misc:Built-Using}
+Description: Monitor CI pipelines from the command line
+ Monitor Continuous Integration pipelines from the command
+ line. cistern stands for Continous Integration Table Of Pipelines.
+ .
+ List pipelines associated to a commit of a GitHub or GitLab repository:
+ pipelines are shown in a tree view where expanding a pipeline will
+ reveal its stages, jobs and tasks
+ .
+ Integration with Travis CI, AppVeyor, CircleCI, GitLab CI and Azure
+ DevOps: cistern is targeted at open source developers
+ .
+ Monitor status changes in quasi real time
+ .
+ Open the web page of a pipeline by pressing a single key: for quick
+ access to the website of your CI provider if cistern does not cover a
+ specific use case.
