@@ -11,17 +11,16 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/nbedos/citop/cache"
-	"github.com/nbedos/citop/utils"
+	"github.com/nbedos/cistern/utils"
 )
 
 func TestParseAppVeyorURL(t *testing.T) {
-	u := "https://ci.appveyor.com/project/nbedos/citop/builds/29070120"
+	u := "https://ci.appveyor.com/project/nbedos/cistern/builds/29070120"
 	owner, repo, id, err := parseAppVeyorURL(u)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if owner != "nbedos" || repo != "citop" || id != 29070120 {
+	if owner != "nbedos" || repo != "cistern" || id != 29070120 {
 		t.Fail()
 	}
 }
@@ -37,15 +36,12 @@ func TestAppVeyorJob_ToCacheJob(t *testing.T) {
 		FinishedAt:   "2019-11-23T12:24:34.5646724+00:00",
 	}
 
-	expectedJob := cache.Step{
-		ID:    "id",
-		Type:  cache.StepJob,
-		State: "passed",
-		Name:  "name",
-		CreatedAt: utils.NullTime{
-			Valid: true,
-			Time:  time.Date(2019, 11, 23, 12, 24, 26, 918187100, time.UTC),
-		},
+	expectedJob := Step{
+		ID:        "id",
+		Type:      StepJob,
+		State:     "passed",
+		Name:      "name",
+		CreatedAt: time.Date(2019, 11, 23, 12, 24, 26, 918187100, time.UTC),
 		StartedAt: utils.NullTime{
 			Valid: true,
 			Time:  time.Date(2019, 11, 23, 12, 24, 31, 814573500, time.UTC),
@@ -94,20 +90,17 @@ func TestAppVeyorBuild_ToCacheBuild(t *testing.T) {
 		UpdatedAt:   "2019-11-23T12:24:34.5646724+00:00",
 	}
 
-	expectedBuild := cache.Pipeline{
+	expectedBuild := Pipeline{
 		Number: "42",
-		GitReference: cache.GitReference{
+		GitReference: GitReference{
 			SHA:   "fd4c4ae5a4005e38c66566e2480087072620e9de",
 			Ref:   "feature/appveyor",
 			IsTag: false,
 		},
-		Step: cache.Step{
+		Step: Step{
 			ID:    "42",
 			State: "failed",
-			CreatedAt: utils.NullTime{
-				Valid: true,
-				Time:  time.Date(2019, 11, 23, 12, 24, 25, 590025800, time.UTC),
-			},
+			CreatedAt: time.Date(2019, 11, 23, 12, 24, 25, 590025800, time.UTC),
 			StartedAt: utils.NullTime{
 				Valid: true,
 				Time:  time.Date(2019, 11, 23, 12, 24, 31, 814573500, time.UTC),
@@ -162,9 +155,9 @@ func TestAppVeyorClient_BuildFromURL(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		filename := ""
 		switch {
-		case r.Method == "GET" && r.URL.Path == "/api/projects/nbedos/citop/history":
+		case r.Method == "GET" && r.URL.Path == "/api/projects/nbedos/cistern/history":
 			filename = "appveyor/appveyor_history_29070120.json"
-		case r.Method == "GET" && r.URL.Path == "/api/projects/nbedos/citop/build/1.0.22":
+		case r.Method == "GET" && r.URL.Path == "/api/projects/nbedos/cistern/build/1.0.22":
 			filename = "appveyor/appveyor_build_1_0_22.json"
 		default:
 			w.WriteHeader(404)
@@ -193,13 +186,13 @@ func TestAppVeyorClient_BuildFromURL(t *testing.T) {
 		client:      &http.Client{Timeout: 10 * time.Second},
 		rateLimiter: time.Tick(time.Millisecond),
 		token:       "token",
-		provider: cache.Provider{
+		provider: Provider{
 			ID:   "id",
 			Name: "name",
 		},
 	}
 
-	buildURL := "https://ci.appveyor.com/project/nbedos/citop/builds/29070120"
+	buildURL := "https://ci.appveyor.com/project/nbedos/cistern/builds/29070120"
 	build, err := client.BuildFromURL(context.Background(), buildURL)
 	if err != nil {
 		t.Fatal(err)
@@ -236,15 +229,15 @@ func TestAppVeyorClient_Log(t *testing.T) {
 		client:      &http.Client{Timeout: 10 * time.Second},
 		rateLimiter: time.Tick(time.Millisecond),
 		token:       "token",
-		provider: cache.Provider{
+		provider: Provider{
 			ID:   "id",
 			Name: "name",
 		},
 	}
 
-	job := cache.Step{
+	job := Step{
 		ID:   "jobId",
-		Type: cache.StepJob,
+		Type: StepJob,
 	}
 	log, err := client.Log(context.Background(), job)
 	if err != nil {

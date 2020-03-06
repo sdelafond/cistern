@@ -12,45 +12,78 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/nbedos/citop/cache"
-	"github.com/nbedos/citop/utils"
+	"github.com/nbedos/cistern/utils"
 	"github.com/xanzy/go-gitlab"
 )
 
 func TestParsePipelineURL(t *testing.T) {
-	c, err := NewGitLabClient("gitlab", "gitlab", "", "", time.Millisecond)
-	if err != nil {
-		t.Fatal(err)
+	testCases := []struct {
+		name         string
+		url          string
+		expectedSlug string
+		expectedID   int
+	}{
+		{
+			name:         "repository path without namespace",
+			url:          "https://gitlab.com/nbedos/cistern/pipelines/97604657",
+			expectedSlug: "nbedos/cistern",
+			expectedID:   97604657,
+		},
+		{
+			name:         "repository path with namespace (issue #16)",
+			url:          "https://gitlab.com/namespace/nbedos/cistern/pipelines/97604657",
+			expectedSlug: "namespace/nbedos/cistern",
+			expectedID:   97604657,
+		},
+		{
+			name:         "repository path with long namespace (issue #16)",
+			url:          "https://gitlab.com/long/namespace/nbedos/cistern/pipelines/97604657",
+			expectedSlug: "long/namespace/nbedos/cistern",
+			expectedID:   97604657,
+		},
 	}
 
-	slug, id, err := c.parsePipelineURL("https://gitlab.com/nbedos/citop/pipelines/97604657")
-	if err != nil {
-		t.Fatal(err)
-	}
+	for _, testCase := range testCases {
+		c, err := NewGitLabClient("gitlab", "gitlab", "", "", 1000)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	if slug != "nbedos/citop" || id != 97604657 {
-		t.Fail()
+		slug, id, err := c.parsePipelineURL(testCase.url)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if slug != testCase.expectedSlug {
+			t.Fatalf("expected slug %q but got %q", testCase.expectedSlug, slug)
+		}
+
+		if id != testCase.expectedID {
+			t.Fatalf("expected id %d but got %d", testCase.expectedID, id)
+		}
 	}
 }
 
-func setupGitLabTestServer(t *testing.T) (GitLabClient, string, func()) {
+func setupGitLabTestServer() (GitLabClient, string, func(), error) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		filename := ""
+
 		switch r.URL.Path {
-		case "/api/v4/projects/nbedos/citop/pipelines/103230300":
+		case "/api/v4/projects/long/namespace/nbedos/cistern/pipelines/103230300":
 			filename = "gitlab_pipeline.json"
-		case "/api/v4/projects/nbedos/citop/pipelines/103230300/jobs":
+		case "/api/v4/projects/long/namespace/nbedos/cistern/pipelines/103230300/jobs":
 			w.Header().Add("X-Total-Pages", "1")
 			filename = "gitlab_jobs.json"
-		case "/api/v4/projects/nbedos/citop/jobs/42/trace":
+		case "/api/v4/projects/long/namespace/nbedos/cistern/jobs/42/trace":
 			filename = "gitlab_log"
-		case "/api/v4/projects/owner/repo/repository/commits/master":
+		case "/api/v4/projects/long/namespace/owner/repo/repository/commits/master":
 			filename = "gitlab_commit.json"
-		case "/api/v4/projects/owner/repo/repository/commits/a24840cf94b395af69da4a1001d32e3694637e20/refs":
+		case "/api/v4/projects/long/namespace/owner/repo/repository/commits/a24840cf94b395af69da4a1001d32e3694637e20/refs":
 			filename = "gitlab_refs.json"
-		case "/api/v4/projects/nbedos/citop/pipelines":
+		case "/api/v4/projects/long/namespace/nbedos/cistern/pipelines":
 			filename = "gitlab_pipelines.json"
-		case "/api/v4/projects/nbedos/citop/repository/commits/a24840cf94b395af69da4a1001d32e3694637e20/statuses":
+		case "/api/v4/projects/long/namespace/nbedos/cistern/repository/commits/a24840cf94b395af69da4a1001d32e3694637e20/statuses":
+			filename = "gitlab_statuses.json"
 		default:
 			w.WriteHeader(404)
 			return
@@ -71,7 +104,8 @@ func setupGitLabTestServer(t *testing.T) (GitLabClient, string, func()) {
 
 	gitlabClient := gitlab.NewClient(ts.Client(), "token")
 	if err := gitlabClient.SetBaseURL(ts.URL); err != nil {
-		t.Fatal(err)
+		ts.Close()
+		return GitLabClient{}, "", nil, err
 	}
 
 	client := GitLabClient{
@@ -79,33 +113,33 @@ func setupGitLabTestServer(t *testing.T) (GitLabClient, string, func()) {
 		rateLimiter: time.Tick(time.Millisecond),
 	}
 
-	return client, ts.URL, func() { ts.Close() }
+	return client, ts.URL, func() { ts.Close() }, nil
 }
 
 func TestGitLabClient_BuildFromURL(t *testing.T) {
-	client, testURL, teardown := setupGitLabTestServer(t)
+	client, testURL, teardown, err := setupGitLabTestServer()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer teardown()
 
-	pipelineURL := testURL + "/nbedos/citop/pipelines/103230300"
+	pipelineURL := testURL + "/long/namespace/nbedos/cistern/pipelines/103230300"
 	pipeline, err := client.BuildFromURL(context.Background(), pipelineURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedPipeline := cache.Pipeline{
-		GitReference: cache.GitReference{
+	expectedPipeline := Pipeline{
+		GitReference: GitReference{
 			SHA: "6645b9ba15963e480be7763d68d9c275760d555e",
 			Ref: "master",
 		},
-		Step: cache.Step{
+		Step: Step{
 			ID:           "103230300",
 			Name:         "",
-			Type:         cache.StepPipeline,
-			State:        cache.Passed,
+			Type:         StepPipeline,
+			State:        Passed,
 			AllowFailure: false,
-			CreatedAt: utils.NullTime{
-				Valid: true,
-				Time:  time.Date(2019, 12, 15, 21, 46, 40, 694000000, time.UTC),
-			},
+			CreatedAt:    time.Date(2019, 12, 15, 21, 46, 40, 694000000, time.UTC),
 			StartedAt: utils.NullTime{
 				Valid: true,
 				Time:  time.Date(2019, 12, 15, 21, 46, 41, 214000000, time.UTC),
@@ -121,18 +155,15 @@ func TestGitLabClient_BuildFromURL(t *testing.T) {
 			},
 			WebURL: utils.NullString{
 				Valid:  true,
-				String: "https://gitlab.com/nbedos/citop/pipelines/103230300",
+				String: "https://gitlab.com/long/namespace/nbedos/cistern/pipelines/103230300",
 			},
-			Children: []cache.Step{
+			Children: []Step{
 				{
 					ID:    "1",
 					Name:  "test",
 					Type:  1,
 					State: "passed",
-					CreatedAt: utils.NullTime{
-						Valid: true,
-						Time:  time.Date(2019, 12, 15, 21, 46, 40, 706000000, time.UTC),
-					},
+					CreatedAt: time.Date(2019, 12, 15, 21, 46, 40, 706000000, time.UTC),
 					StartedAt: utils.NullTime{
 						Valid: true,
 						Time:  time.Date(2019, 12, 15, 21, 46, 41, 151000000, time.UTC),
@@ -145,16 +176,17 @@ func TestGitLabClient_BuildFromURL(t *testing.T) {
 						Valid:    true,
 						Duration: time.Minute + 31*time.Second,
 					},
-					Children: []cache.Step{
+					WebURL: utils.NullString{
+						Valid:  true,
+						String: "https://gitlab.com/long/namespace/nbedos/cistern/pipelines/103230300",
+					},
+					Children: []Step{
 						{
 							ID:    "379869167",
 							Name:  "golang 1.13",
 							Type:  2,
 							State: "passed",
-							CreatedAt: utils.NullTime{
-								Valid: true,
-								Time:  time.Date(2019, 12, 15, 21, 46, 40, 706000000, time.UTC),
-							},
+							CreatedAt: time.Date(2019, 12, 15, 21, 46, 40, 706000000, time.UTC),
 							StartedAt: utils.NullTime{
 								Valid: true,
 								Time:  time.Date(2019, 12, 15, 21, 46, 41, 151000000, time.UTC),
@@ -167,8 +199,8 @@ func TestGitLabClient_BuildFromURL(t *testing.T) {
 								Valid:    true,
 								Duration: time.Minute + 31*time.Second,
 							},
-							WebURL: utils.NullString{Valid: true, String: "https://gitlab.com/nbedos/citop/-/jobs/379869167"},
-							Log:    cache.Log{Key: "nbedos/citop"},
+							WebURL: utils.NullString{Valid: true, String: "https://gitlab.com/long/namespace/nbedos/cistern/-/jobs/379869167"},
+							Log:    Log{Key: "long/namespace/nbedos/cistern"},
 						},
 					},
 				},
@@ -181,13 +213,16 @@ func TestGitLabClient_BuildFromURL(t *testing.T) {
 }
 
 func TestGitLabClient_Log(t *testing.T) {
-	client, _, teardown := setupGitLabTestServer(t)
+	client, _, teardown, err := setupGitLabTestServer()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer teardown()
 
-	step := cache.Step{
+	step := Step{
 		ID: "42",
-		Log: cache.Log{
-			Key: "nbedos/citop",
+		Log: Log{
+			Key: "long/namespace/nbedos/cistern",
 		},
 	}
 	log, err := client.Log(context.Background(), step)
@@ -202,15 +237,18 @@ func TestGitLabClient_Log(t *testing.T) {
 
 func TestGitLabClient_Commit(t *testing.T) {
 	t.Run("existing reference", func(t *testing.T) {
-		client, testURL, teardown := setupGitLabTestServer(t)
+		client, testURL, teardown, err:= setupGitLabTestServer()
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer teardown()
 
-		commit, err := client.Commit(context.Background(), testURL+"/owner/repo", "master")
+		commit, err := client.Commit(context.Background(), testURL+"/long/namespace/owner/repo", "master")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		expectedCommit := cache.Commit{
+		expectedCommit := Commit{
 			Sha:      "a24840cf94b395af69da4a1001d32e3694637e20",
 			Author:   "nbedos <nicolas.bedos@gmail.com>",
 			Date:     time.Date(2019, 12, 16, 18, 6, 43, 0, time.UTC),
@@ -227,27 +265,33 @@ func TestGitLabClient_Commit(t *testing.T) {
 	})
 
 	t.Run("non existing commit", func(t *testing.T) {
-		client, testURL, teardown := setupGitLabTestServer(t)
+		client, testURL, teardown, err := setupGitLabTestServer()
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer teardown()
 
-		_, err := client.Commit(context.Background(), testURL+"/owner/repo", "0000000")
-		if err != cache.ErrUnknownGitReference {
+		_, err = client.Commit(context.Background(), testURL+"/long/namespace/owner/repo", "0000000")
+		if err != ErrUnknownGitReference {
 			t.Fatal(err)
 		}
 	})
 }
 
 func TestGitLabClient_RefStatuses(t *testing.T) {
-	client, testURL, teardown := setupGitLabTestServer(t)
+	client, testURL, teardown, err := setupGitLabTestServer()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer teardown()
 
-	statuses, err := client.RefStatuses(context.Background(), testURL+"/nbedos/citop", "", "a24840cf94b395af69da4a1001d32e3694637e20")
+	statuses, err := client.RefStatuses(context.Background(), testURL+"/long/namespace/nbedos/cistern", "", "a24840cf94b395af69da4a1001d32e3694637e20")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expectedStatuses := []string{
-		"https://gitlab.com/nbedos/citop/pipelines/103494597",
+		"https://gitlab.com/long/namespace/nbedos/cistern/pipelines/103494597",
 	}
 	sort.Strings(expectedStatuses)
 	sort.Strings(statuses)

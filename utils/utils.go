@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -36,33 +38,7 @@ func Bounded(a, lower, upper int) int {
 	return MaxInt(lower, MinInt(a, upper))
 }
 
-type TreeNode interface {
-	Children() []TreeNode
-	Traversable() bool
-	SetTraversable(traversable bool, recursive bool)
-}
-
-func DepthFirstTraversal(node TreeNode, traverseAll bool) []TreeNode {
-	explored := make([]TreeNode, 0)
-	toBeExplored := []TreeNode{node}
-
-	for len(toBeExplored) > 0 {
-		node = toBeExplored[len(toBeExplored)-1]
-		toBeExplored = toBeExplored[:len(toBeExplored)-1]
-		if traverseAll || node.Traversable() {
-			children := node.Children()
-			for i := len(children) - 1; i >= 0; i-- {
-				toBeExplored = append(toBeExplored, children[i])
-			}
-		}
-
-		explored = append(explored, node)
-	}
-
-	return explored
-}
-
-func RepoHostOwnerAndName(repositoryURL string) (string, string, string, error) {
+func RepositoryHostAndSlug(repositoryURL string) (string, string, error) {
 	// Turn "git@host:path.git" into "host/path" so that it is compatible with url.Parse()
 	if strings.HasPrefix(repositoryURL, "git@") {
 		repositoryURL = strings.TrimPrefix(repositoryURL, "git@")
@@ -72,35 +48,23 @@ func RepoHostOwnerAndName(repositoryURL string) (string, string, string, error) 
 
 	u, err := url.Parse(repositoryURL)
 	if err != nil {
-		return "", "", "", err
+		return "", "", err
 	}
 	if u.Host == "" && !strings.Contains(repositoryURL, "://") {
-		// example.com/aaa/bbb is parsed as url.URL{Host: "", Path:"example.com/aaa/bbb"}
-		// but we expect url.URL{Host: "example.com", Path:"/aaa/bbb"}. Adding a scheme fixes this.
+		// example.com/aaa/bbb is parsed as url.url{Host: "", Path:"example.com/aaa/bbb"}
+		// but we expect url.url{Host: "example.com", Path:"/aaa/bbb"}. Adding a scheme fixes this.
 		//
 		u, err = url.Parse("https://" + repositoryURL)
 		if err != nil {
-			return "", "", "", err
+			return "", "", err
 		}
 	}
 
-	components := strings.FieldsFunc(u.Path, func(c rune) bool { return c == '/' })
-	if len(components) < 2 {
-		err := fmt.Errorf("invalid repository path: %q (expected at least two components)",
-			u.String())
-		return "", "", "", err
+	if l := len(strings.FieldsFunc(u.Path, func(r rune) bool { return r == '/' })); l < 2 {
+		return "", "", fmt.Errorf("invalid repository path: %q (expected at least two path components)", repositoryURL)
 	}
 
-	return u.Hostname(), components[0], components[1], nil
-}
-
-func Prefix(s string, prefix string) string {
-	builder := strings.Builder{}
-	for _, line := range strings.Split(s, "\n") {
-		builder.WriteString(fmt.Sprintf("%s%s\n", prefix, line))
-	}
-
-	return builder.String()
+	return u.Hostname(), strings.Trim(u.Path, "/"), nil
 }
 
 type NullString struct {
@@ -211,4 +175,22 @@ func XDGConfigLocations(filename string) []string {
 	}
 
 	return locations
+}
+
+func StartAndRelease(executable string, args []string) error {
+	if filepath.Base(executable) == executable {
+		lp, err := exec.LookPath(executable)
+		if err != nil {
+			return err
+		}
+		executable = lp
+	}
+
+	argv := append([]string{path.Base(executable)}, args...)
+	process, err := os.StartProcess(executable, argv, &os.ProcAttr{})
+	if err != nil {
+		return err
+	}
+
+	return process.Release()
 }
