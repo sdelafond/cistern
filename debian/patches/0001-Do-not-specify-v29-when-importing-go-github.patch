@@ -1,0 +1,35 @@
+From: =?utf-8?q?S=C3=A9bastien_Delafond?= <sdelafond@gmail.com>
+Date: Fri, 2 Oct 2020 08:53:46 +0200
+Subject: Do not specify /v29 when importing go-github
+
+---
+ providers/github.go      | 2 +-
+ providers/github_test.go | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/providers/github.go b/providers/github.go
+index bfa53e0..34d0d23 100644
+--- a/providers/github.go
++++ b/providers/github.go
+@@ -8,7 +8,7 @@ import (
+ 	"strings"
+ 	"sync"
+ 
+-	"github.com/google/go-github/v29/github"
++	"github.com/google/go-github/github"
+ 	"github.com/nbedos/cistern/utils"
+ 	"golang.org/x/oauth2"
+ )
+diff --git a/providers/github_test.go b/providers/github_test.go
+index a629723..256bf4b 100644
+--- a/providers/github_test.go
++++ b/providers/github_test.go
+@@ -12,7 +12,7 @@ import (
+ 	"time"
+ 
+ 	"github.com/google/go-cmp/cmp"
+-	"github.com/google/go-github/v29/github"
++	"github.com/google/go-github/github"
+ )
+ 
+ func setupGitHubTestServer() (*http.Client, string, func()) {
